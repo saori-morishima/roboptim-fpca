@@ -6,7 +6,9 @@
 #include <roboptim/core/solver.hh>
 #include <roboptim/core/solver-factory.hh>
 
-// Define a sovler type.
+#include <roboptim/trajectory/cubic-b-spline.hh>
+#include <roboptim/trajectory/visualization/trajectory.hh>
+// Define a solver type.
 //
 // Cost: Differentiable Function (gradient computations but no hessian)
 // Constraint: Differentiable Function or Linear Function
@@ -82,8 +84,8 @@ int main ()
   // evaluate cost function and associated gradient at a particular point x
   Cost::vector_t x (10);
   x << 0,1,2,3,4,5,6,7,8,9;
-  std::cout << cost(x) << std::endl;
-  std::cout << cost.gradient(x) << std::endl;
+  std::cerr << cost(x) << std::endl;
+  std::cerr << cost.gradient(x) << std::endl;
 
   // create the problem
   solver_t::problem_t problem (cost);
@@ -114,13 +116,30 @@ int main ()
   solver_t& solver = factory ();
 
   // display the solver and problem
-  std::cout << solver << std::endl;
+  std::cerr << solver << std::endl;
 
   // solve the problem
   solver.solve ();
   
   // display the result
-  std::cout << solver.minimum () << std::endl;
+  std::cerr << solver.minimum () << std::endl;
 
+  /*
+  // create a spline
+  roboptim::CubicBSpline::interval_t timeRange =
+    roboptim::CubicBSpline::makeInterval (0., 10.);
+
+  roboptim::CubicBSpline::vector_t parameters (2 * 10);
+  parameters =
+    roboptim::CubicBSpline::vector_t::Random (2 * 10);
+
+  roboptim::CubicBSpline spline (timeRange, 2, parameters);
+
+  // display trajectory as Gnuplot data
+  roboptim::visualization::Gnuplot gnuplot =
+    roboptim::visualization::Gnuplot::make_interactive_gnuplot ();
+  gnuplot << roboptim::visualization::gnuplot::plot_xy (spline);
+  std::cout << gnuplot;
+  */
   return 0;
 }
