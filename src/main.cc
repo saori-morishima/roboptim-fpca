@@ -1,3 +1,5 @@
+#include <fstream>
+
 #include <boost/make_shared.hpp>
 
 #include <roboptim/core/linear-function.hh>
@@ -8,6 +10,7 @@
 
 #include <roboptim/trajectory/cubic-b-spline.hh>
 #include <roboptim/trajectory/visualization/trajectory.hh>
+
 // Define a solver type.
 //
 // Cost: Differentiable Function (gradient computations but no hessian)
@@ -25,7 +28,7 @@ class Cost : public roboptim::DifferentiableFunction
 public:
   Cost ()
     // input size, output size, description
-    : roboptim::DifferentiableFunction (10, 1, "the cost function")
+    : roboptim::DifferentiableFunction (2 * 10, 1, "the cost function")
   {}
 
   ~Cost ()
@@ -53,7 +56,7 @@ class Constraint : public roboptim::DifferentiableFunction
 public:
   Constraint ()
     // input size, output size, description
-    : roboptim::DifferentiableFunction (10, 1, "the constraint")
+    : roboptim::DifferentiableFunction (2 * 10, 1, "the constraint")
   {}
 
   ~Constraint ()
@@ -78,14 +81,31 @@ private:
 
 int main ()
 {
+  // create a spline
+  roboptim::CubicBSpline::interval_t timeRange =
+    roboptim::CubicBSpline::makeInterval (0., 10.);
+
+  roboptim::CubicBSpline::vector_t parameters (2 * 10);
+  parameters =
+    roboptim::CubicBSpline::vector_t::Random (2 * 10);
+
+  roboptim::CubicBSpline spline (timeRange, 2, parameters);
+
+  // display trajectory as Gnuplot data
+  roboptim::visualization::Gnuplot gnuplot =
+    roboptim::visualization::Gnuplot::make_gnuplot ();
+  gnuplot
+    << roboptim::visualization::gnuplot::set ("terminal png")
+    << roboptim::visualization::gnuplot::set ("output \"result.png\"")
+    << roboptim::visualization::gnuplot::set ("multiplot layout 2,1")
+    << roboptim::visualization::gnuplot::plot_xy (spline);
+
   // create the cost function
   Cost cost;
 
   // evaluate cost function and associated gradient at a particular point x
-  Cost::vector_t x (10);
-  x << 0,1,2,3,4,5,6,7,8,9;
-  std::cerr << cost(x) << std::endl;
-  std::cerr << cost.gradient(x) << std::endl;
+  std::cerr << cost(spline.parameters ()) << std::endl;
+  std::cerr << cost.gradient(spline.parameters ()) << std::endl;
 
   // create the problem
   solver_t::problem_t problem (cost);
@@ -96,7 +116,7 @@ int main ()
 
   // constraint: define associated interval
   solver_t::problem_t::intervals_t intervals (1);
-  intervals[0] = 
+  intervals[0] =
     roboptim::Function::makeInterval (5, 10);
   // constraint: ...and scale
   solver_t::problem_t::scales_t scales (1);
@@ -105,7 +125,7 @@ int main ()
   problem.addConstraint (constraint, intervals, scales);
 
   // define the starting point
-  problem.startingPoint () = x;
+  problem.startingPoint () = spline.parameters ();
 
   // add bounds to one variable
   problem.argumentBounds ()[0] =
@@ -120,26 +140,51 @@ int main ()
 
   // solve the problem
   solver.solve ();
-  
+
   // display the result
   std::cerr << solver.minimum () << std::endl;
 
-  /*
-  // create a spline
-  roboptim::CubicBSpline::interval_t timeRange =
-    roboptim::CubicBSpline::makeInterval (0., 10.);
+  // changing the spline parameters
+  switch (solver.minimum ().which ())
+    {
+    case solver_t::SOLVER_VALUE:
+      {
+	const roboptim::Result& result =
+	  boost::get<roboptim::Result> (solver.minimum ());
+	// result.x is the final optimization variables values
+	spline.setParameters (result.x);
+	break;
+      }
+    case solver_t::SOLVER_VALUE_WARNINGS:
+      {
+	const roboptim::ResultWithWarnings& result =
+	  boost::get<roboptim::ResultWithWarnings> (solver.minimum ());
+	// result.x is the final optimization variables values
+	spline.setParameters (result.x);
+	break;
+      }
+    case solver_t::SOLVER_NO_SOLUTION:
+      {
+	std::cout << "A solution should have been found. Failing..."
+		  << std::endl
+		  << "No solution was found."
+		  << std::endl;
+	return 1;
+      }
+    case solver_t::SOLVER_ERROR:
+      {
+	std::cout << "A solution should have been found. Failing..."
+		  << std::endl
+		  << boost::get<roboptim::SolverError> (solver.minimum ()).what ()
+		  << std::endl;
+	return 1;
+      }
+    }
 
-  roboptim::CubicBSpline::vector_t parameters (2 * 10);
-  parameters =
-    roboptim::CubicBSpline::vector_t::Random (2 * 10);
-
-  roboptim::CubicBSpline spline (timeRange, 2, parameters);
-
-  // display trajectory as Gnuplot data
-  roboptim::visualization::Gnuplot gnuplot =
-    roboptim::visualization::Gnuplot::make_interactive_gnuplot ();
-  gnuplot << roboptim::visualization::gnuplot::plot_xy (spline);
-  std::cout << gnuplot;
-  */
+  gnuplot
+    << roboptim::visualization::gnuplot::plot_xy (spline)
+    << roboptim::visualization::gnuplot::unset ("multiplot");
+  std::ofstream fileResult ("result.gp");
+  fileResult << gnuplot;
   return 0;
 }
